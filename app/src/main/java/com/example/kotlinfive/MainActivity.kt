@@ -1,78 +1,31 @@
 package com.example.kotlinfive
 
 import android.app.Application
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.room.Dao
-import androidx.room.Database
-import androidx.room.Delete
-import androidx.room.Entity
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.PrimaryKey
-import androidx.room.Query
-import androidx.room.Room
-import androidx.room.RoomDatabase
-import androidx.room.Update
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.*
+import androidx.room.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.kotlinfive.ui.theme.KotlinFiveTheme
 
-
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            KotlinFiveTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Surface(modifier = Modifier.padding(innerPadding)) {
-                        ShoppingListScreen()
-                    }
-                }
-            }
-        }
-    }
-}
-
-// Model View ViewModel
 
 @Entity(tableName = "shopping_items")
 data class ShoppingItem(
@@ -80,7 +33,8 @@ data class ShoppingItem(
     val isBought: Boolean = false,
     @PrimaryKey(autoGenerate = true) val id: Int = 0
 )
-// ORM
+
+
 @Dao
 interface ShoppingDao {
     @Query("SELECT * FROM shopping_items ORDER BY id DESC")
@@ -96,6 +50,7 @@ interface ShoppingDao {
     fun deleteItem(item: ShoppingItem)
 }
 
+
 @Database(entities = [ShoppingItem::class], version = 1)
 abstract class ShoppingDatabase : RoomDatabase() {
     abstract fun shoppingDao(): ShoppingDao
@@ -104,7 +59,7 @@ abstract class ShoppingDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: ShoppingDatabase? = null
 
-        fun getInstance(context: Context): ShoppingDatabase {
+        fun getInstance(context: android.content.Context): ShoppingDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
@@ -152,38 +107,21 @@ class ShoppingListViewModel(application: Application) : AndroidViewModel(applica
             _shoppingList[index] = updatedItem
         }
     }
-}
 
+    fun updateItem(item: ShoppingItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.updateItem(item)
+            loadShoppingList()
+        }
+    }
 
-@Composable
-fun ShoppingItemCard(
-    item: ShoppingItem,
-    onToggleBought: () -> Unit = {}
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp)
-            .background(
-                Color.LightGray,
-//                MaterialTheme.colorScheme.surfaceDim,
-                MaterialTheme.shapes.large
-            )
-            .clickable { onToggleBought() }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Checkbox(checked = item.isBought, onCheckedChange = {
-            onToggleBought()
-        })
-        Text(
-            text = item.name,
-            modifier = Modifier.weight(1f),
-            fontSize = 18.sp
-        )
+    fun deleteItem(item: ShoppingItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.deleteItem(item)
+            loadShoppingList()
+        }
     }
 }
-
 
 class ShoppingListViewModelFactory(private val application: Application) :
     ViewModelProvider.Factory {
@@ -195,6 +133,8 @@ class ShoppingListViewModelFactory(private val application: Application) :
         throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
+
+
 
 @Composable
 fun AddItemButton(addItem: (String) -> Unit = {}) {
@@ -217,50 +157,99 @@ fun AddItemButton(addItem: (String) -> Unit = {}) {
     }
 }
 
-//interface ShoppingApi {
-//    @GET("items")
-//    suspend fun getItems(): List<ShoppingItem>
-//
-//    @POST("items")
-//    suspend fun addItem(@Body item: ShoppingItem)
-//
-//    @PUT("items/{id}")
-//    suspend fun updateItem(@Path("id") id: Int, @Body item: ShoppingItem)
-//
-//    @DELETE("items")
-//    suspend fun clearItems()
-//}
-//
-//object RetrofitInstance {
-//    private const val BASE_URL = "http://10.0.2.2:8080/"
-//
-//    val api: ShoppingApi by lazy {
-//        Retrofit.Builder()
-//            .baseUrl(BASE_URL)
-//            .addConverterFactory(GsonConverterFactory.create())
-//            .build()
-//            .create(ShoppingApi::class.java)
-//    }
-//}
-
+@Composable
+fun ShoppingItemCard(
+    item: ShoppingItem,
+    onToggleBought: () -> Unit = {},
+    onEdit: (ShoppingItem) -> Unit = {},
+    onDelete: (ShoppingItem) -> Unit = {}
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+            .background(Color.LightGray, MaterialTheme.shapes.large)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(checked = item.isBought, onCheckedChange = { onToggleBought() })
+        Text(
+            text = item.name,
+            modifier = Modifier.weight(1f),
+            fontSize = 18.sp
+        )
+        Button(onClick = { onEdit(item) }, modifier = Modifier.padding(start = 8.dp)) {
+            Text("Edit")
+        }
+        Button(onClick = { onDelete(item) }, modifier = Modifier.padding(start = 8.dp)) {
+            Text("Delete")
+        }
+    }
+}
 
 @Composable
 fun ShoppingListScreen(viewModel: ShoppingListViewModel = viewModel(
-    factory = ShoppingListViewModelFactory(
-        LocalContext.current
-        .applicationContext as Application
-    )
+    factory = ShoppingListViewModelFactory(LocalContext.current.applicationContext as Application)
 )) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize()
-            .padding(16.dp)
-    ) {
+    var editingItem by remember { mutableStateOf<ShoppingItem?>(null) }
+    var editingText by remember { mutableStateOf("") }
+
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         item {
-            AddItemButton { viewModel.addItem(it) }
+            if (editingItem == null) {
+                AddItemButton { viewModel.addItem(it) }
+            } else {
+                Column {
+                    OutlinedTextField(
+                        value = editingText,
+                        onValueChange = { editingText = it },
+                        label = { Text("Edit Item") }
+                    )
+                    Button(onClick = {
+                        val updated = editingItem!!.copy(name = editingText)
+                        viewModel.updateItem(updated)
+                        editingItem = null
+                        editingText = ""
+                    }) {
+                        Text("Save")
+                    }
+                    Button(onClick = {
+                        editingItem = null
+                        editingText = ""
+                    }) {
+                        Text("Cancel")
+                    }
+                }
+            }
         }
-        itemsIndexed(viewModel.shoppingList) { ix, item ->
-            ShoppingItemCard(item) {
-                viewModel.toggleBought(ix)
+
+        itemsIndexed(viewModel.shoppingList) { index, item ->
+            ShoppingItemCard(
+                item = item,
+                onToggleBought = { viewModel.toggleBought(index) },
+                onEdit = {
+                    editingItem = it
+                    editingText = it.name
+                },
+                onDelete = { viewModel.deleteItem(it) }
+            )
+        }
+    }
+}
+
+
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            KotlinFiveTheme {
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    Surface(modifier = Modifier.padding(innerPadding)) {
+                        ShoppingListScreen()
+                    }
+                }
             }
         }
     }
@@ -270,16 +259,4 @@ fun ShoppingListScreen(viewModel: ShoppingListViewModel = viewModel(
 @Composable
 fun ShoppingListScreenPreview() {
     ShoppingListScreen()
-}
-
-
-//@Preview(showBackground = true)
-@Composable
-fun ShoppingItemCardPreview() {
-    var toggleState by remember { mutableStateOf(false) }
-    ShoppingItemCard(
-        ShoppingItem("Молоко", isBought = toggleState)
-    ) {
-        toggleState = !toggleState
-    }
 }
